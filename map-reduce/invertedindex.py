@@ -3,12 +3,13 @@
 
 import itertools
 from abc import ABC, abstractmethod
+from collections import Counter
+from typing import Iterable, Iterator
+
 from .dictionary import InMemoryDictionary
 from .normalization import Normalizer
 from .tokenization import Tokenizer
 from .corpus import Corpus
-from collections import Counter
-from typing import Iterable, Iterator
 
 
 class Posting:
