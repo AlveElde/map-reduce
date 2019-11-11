@@ -38,34 +38,47 @@ class MapReducer:
         if print_log:
             print(log_line)
 
-    def _parallelize(self, func, parts, total_parts):
+    def _parallelize(self, func: callable, parts: list, total_parts: int) -> list:
+        # Run the function func on each part in parts.
+        # JobLib will perform the function calls in parallel threads.
         return Parallel(n_jobs=total_parts, prefer="threads")(delayed(func)(part) for part in parts)
 
     def get_terms(self, buffer: str) -> Iterator[str]:
         return (self._normalizer.normalize(t) for t in self._tokenizer.strings(self._normalizer.canonicalize(buffer)))
 
-    def _map(self, part):
+    def _map(self, doc: InMemoryDocument) -> list:
+        # Create (key, value) tuples for each term in a document.
+        # The term is the key and the document ID is the value.
+        # Terms are not counted in any way here. 
+
         keyvals = []
         for field in self._fields:
-            for term in self.get_terms(part[field]):
-                keyvals.append((term, part.document_id))
+            for term in self.get_terms(doc[field]):
+                keyvals.append((term, doc.document_id))
         return keyvals
     
-    def _partition(self, keyvals_list, total_parts):
+    def _partition(self, keyvals_list: list(list((str, int))), total_parts: int) -> list:
+        # Partition the (key, value) pairs into a number of partitions.
+        # The terms are partitioned based on a modulated hash of each term.
+        # Hashing each term ensures all key/val pairs of that term are put in the same partition.
+        # This will probably result in a non-optimal distribution of terms with high frequency. 
+
         parts = [[] for i in range(0, total_parts)]
         for keyvals in keyvals_list:
             for term, doc_id in keyvals:
                 parts[hash(term) % total_parts].append((term, doc_id))
         return parts
 
-    def _reduce(self, part):
+    def _reduce(self, partition: list((str, int))) -> (list, dict):
+        # Reduce the (key, value) pairs into posting lists.
+        # This step will produce complete posting lists for each term in this partition.
+        # It will also produce a term ID dictionary for each term in this partition.
+
         dictionary = InMemoryDictionary()
         posting_lists = []
 
-        for term, doc_id in part:
+        for term, doc_id in partition:
             term_id = dictionary.add_if_absent(term)
-
-            # Ensure we have a place to put our posting lists.
             posting_lists.extend([] for i in range(len(posting_lists), term_id+1))
 
             # Increment the count on a previously existing posting for this document ID. 
@@ -82,7 +95,11 @@ class MapReducer:
         
         return posting_lists, dictionary
 
-    def _combine(self, reduced_parts):
+    def _combine(self, reduced_parts) -> (list, dict):
+        # Combine the dictionaries from each reduced partition and join the posting lists.
+        # The term ID of a posting list must be offset by the posting lists from other
+        # partitions before it.
+
         combined_posting_lists = []
         combined_dictionary = {}
 
