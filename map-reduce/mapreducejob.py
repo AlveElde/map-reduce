@@ -8,6 +8,7 @@ from .invertedindex import InMemoryInvertedIndex
 from .normalization import BrainDeadNormalizer
 from .tokenization import BrainDeadTokenizer
 from .dictionary import InMemoryDictionary
+from .invertedindex import Posting
 
 class IntermediatePosting:
     #TODO: slots
@@ -36,17 +37,22 @@ class MapReduceJob:
 
         for interpostings in results:
             for interposting in interpostings:
-                partitions[hash(interposting.term) % reducers] = interposting
+                partitions[hash(interposting.term) % reducers].append(interposting)
         
-        #postings = self.parallelize(self.reduce_to_postings, partitions, reducers)
+        posting_lists = self.parallelize(self.reduce_to_posting_lists, partitions, reducers)
+
+        # Take the dictionaries as well
+        # join the poisting list lists
+        # Create a new dictionary, with correct term_ids
+        print("Done!")
+
+
+
 
     def parallelize(self, func, elements, jobs):
         return Parallel(n_jobs=jobs)(delayed(func)(elem) for elem in elements)
 
     def map_terms(self, doc):
-        # Take a list of documents
-        # Create a (term, doc_id) for each term in each field
-        # Return a list of (term, doc_id) tuples
         mapped_items = []
         for field in self._fields:
             for term in self._index.get_terms(doc[field]):
@@ -61,14 +67,26 @@ class MapReduceJob:
 
         pass
 
-    def reduce_to_postings(self, interpostings):
-        # Take a list of (term, doc_id) tuples
-        # Group the tuples on term
-        # Return a list of postings
-        self._dictionary = InMemoryDictionary()
-        self._posting_lists = []
+    def reduce_to_posting_lists(self, partitions):
+        dictionary = InMemoryDictionary()
+        posting_lists = []
 
-        for interposting in interpostings:
-            term_id = self._dictionary.add_if_absent(term)
-            self._posting_lists.extend([] for i in range(len(self._posting_lists), term_id+1))
-            self._posting_lists[term_id].append(Posting(doc.document_id, counter[term]))
+        for interposting in partitions:
+            term_id = dictionary.add_if_absent(interposting.term)
+
+            # Ensure we have a place to put our posting lists.
+            posting_lists.extend([] for i in range(len(posting_lists), term_id+1))
+
+            # Increment the count on a previously existing posting for this document ID. 
+            has_posting = False
+            for posting in posting_lists[term_id]:
+                if posting.document_id == interposting.document_id:
+                    posting.term_frequency += 1
+                    has_posting = True
+                    break
+            
+            # Create a new posting for this document ID.
+            if not has_posting:
+                posting_lists[term_id].append(Posting(interposting.document_id, 1))
+        
+        return posting_lists

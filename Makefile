@@ -1,4 +1,4 @@
 
 all:
-	python3 -m map-reduce
+	py -m map-reduce
 
