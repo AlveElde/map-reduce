@@ -10,19 +10,10 @@ from .dictionary import InMemoryDictionary
 from .normalization import Normalizer
 from .tokenization import Tokenizer
 from .corpus import Corpus
+from .mapreducer import MapReducer
+from .posting import Posting
 
 
-class Posting:
-    """
-    A very simple posting entry in a non-positional inverted index.
-    """
-
-    def __init__(self, document_id: int, term_frequency: int):
-        self.document_id = document_id
-        self.term_frequency = term_frequency
-
-    def __repr__(self):
-        return str({"document_id": self.document_id, "term_frequency": self.term_frequency})
 
 
 class InvertedIndex(ABC):
@@ -124,5 +115,40 @@ class InMemoryInvertedIndex(InvertedIndex):
         # In a serious application we'd store this number explicitly, e.g., as part of the dictionary.
         # That way, we can look up the document frequency without having to access the posting lists
         # themselves. Imagine if the posting lists don't even reside in memory!
+        term_id = self._dictionary.get_term_id(term)
+        return 0 if term_id is None else len(self._posting_lists[term_id])
+
+
+class MapReduceInvertedIndex(InvertedIndex):
+    """
+    
+    """
+
+    def __init__(self, corpus: Corpus, fields: Iterable[str], normalizer: Normalizer, tokenizer: Tokenizer):
+        self._corpus = corpus
+        self._normalizer = normalizer
+        self._tokenizer = tokenizer
+        self._posting_lists = []
+        self._dictionary = InMemoryDictionary()
+        self._build_index(fields)
+
+    def __repr__(self):
+        return str({term: self._posting_lists[term_id] for (term, term_id) in self._dictionary})
+
+    def _build_index(self, fields: Iterable[str]) -> None:
+       mapreducer = MapReducer(fields, self._corpus, self._normalizer, self._tokenizer)
+       mappers = 4 
+       reducers = 4
+       print_info = True
+       self._posting_lists, self._dictionary._terms = mapreducer.mapreduce(mappers, reducers, print_info)
+
+    def get_terms(self, buffer: str) -> Iterator[str]:
+        return (self._normalizer.normalize(t) for t in self._tokenizer.strings(self._normalizer.canonicalize(buffer)))
+
+    def get_postings_iterator(self, term: str) -> Iterator[Posting]:
+        term_id = self._dictionary.get_term_id(term)
+        return iter([]) if term_id is None else iter(self._posting_lists[term_id])
+
+    def get_document_frequency(self, term: str) -> int:
         term_id = self._dictionary.get_term_id(term)
         return 0 if term_id is None else len(self._posting_lists[term_id])

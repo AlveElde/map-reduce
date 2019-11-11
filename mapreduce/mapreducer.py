@@ -1,59 +1,62 @@
 from .corpus import InMemoryDocument, InMemoryCorpus
-from .invertedindex import InMemoryInvertedIndex
 from .normalization import BrainDeadNormalizer
 from .tokenization import BrainDeadTokenizer
 from .dictionary import InMemoryDictionary
-from .invertedindex import Posting
+from .posting import Posting
+
+from typing import Iterable, Iterator
 
 from joblib import Parallel, delayed
 
-class MapReduceJob:
-    def __init__(self):
-        self._corpus = InMemoryCorpus()
-        self._normalizer = BrainDeadNormalizer()
-        self._tokenizer = BrainDeadTokenizer()
-        self._corpus.add_document(InMemoryDocument(0, {"body": "this is a Test"}))
-        self._corpus.add_document(InMemoryDocument(1, {"body": "test TEST prØve"}))
-        self._index = InMemoryInvertedIndex(self._corpus, ["body"], self._normalizer, self._tokenizer)
-        self._fields = ["body"]
+class MapReducer:
+    def __init__(self, fields, corpus, normalizer, tokenizer):
+        self._fields = fields
+        self._corpus = corpus
+        self._normalizer = normalizer
+        self._tokenizer = tokenizer
 
-    def mapreduce(self):
-        mappers = 2
-        reducers = 2
-
-        # Map.
+    def mapreduce(self, mappers, reducers, print_log) -> (list, dict):
+        self.print_log("Starting mapping...", print_log)
         keyvals_list = self._parallelize(self._map, self._corpus._documents, mappers)
+        self.print_log("Finished mapping!", print_log)
 
-        # Partition.
+        self.print_log("Starting partitioning...", print_log)
         parts = self._partition(keyvals_list, reducers)
+        self.print_log("Finished partitioning!", print_log)
        
-        # Reduce.
+        self.print_log("Starting reducing...", print_log)
         reduced_parts = self._parallelize(self._reduce, parts, reducers)
+        self.print_log("Finished reducing!", print_log)
 
-        # Combine.
-        combined_posting_lists, combined_dictionary = self._combine(reduced_parts)
+        self.print_log("Starting combining...", print_log)
+        combined_parts = self._combine(reduced_parts)
+        self.print_log("Finished combining!", print_log)
 
-        print("Done!")
+        return combined_parts
+    
+    def print_log(self, log_line, print_log):
+        if print_log:
+            print(log_line)
 
     def _parallelize(self, func, parts, total_parts):
-        return Parallel(n_jobs=total_parts)(delayed(func)(part) for part in parts)
+        return Parallel(n_jobs=total_parts, prefer="threads")(delayed(func)(part) for part in parts)
 
+    def get_terms(self, buffer: str) -> Iterator[str]:
+        return (self._normalizer.normalize(t) for t in self._tokenizer.strings(self._normalizer.canonicalize(buffer)))
 
     def _map(self, part):
         keyvals = []
         for field in self._fields:
-            for term in self._index.get_terms(part[field]):
+            for term in self.get_terms(part[field]):
                 keyvals.append((term, part.document_id))
         return keyvals
     
-
     def _partition(self, keyvals_list, total_parts):
         parts = [[] for i in range(0, total_parts)]
         for keyvals in keyvals_list:
             for term, doc_id in keyvals:
                 parts[hash(term) % total_parts].append((term, doc_id))
         return parts
-
 
     def _reduce(self, part):
         dictionary = InMemoryDictionary()
@@ -78,7 +81,6 @@ class MapReduceJob:
                 posting_lists[term_id].append(Posting(doc_id, 1))
         
         return posting_lists, dictionary
-
 
     def _combine(self, reduced_parts):
         combined_posting_lists = []
