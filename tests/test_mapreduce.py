@@ -1,6 +1,6 @@
 import unittest
 
-class TestInMemoryInvertedIndex(unittest.TestCase):
+class TestMapReduceInvertedIndex(unittest.TestCase):
     def setUp(self):
         from mapreduce.normalization import BrainDeadNormalizer
         from mapreduce.tokenization import BrainDeadTokenizer
@@ -9,11 +9,11 @@ class TestInMemoryInvertedIndex(unittest.TestCase):
 
     def test_access_postings(self):
         from mapreduce.corpus import InMemoryDocument, InMemoryCorpus
-        from mapreduce.invertedindex import InMemoryInvertedIndex
+        from mapreduce.invertedindex import MapReduceInvertedIndex
         corpus = InMemoryCorpus()
         corpus.add_document(InMemoryDocument(0, {"body": "this is a Test"}))
         corpus.add_document(InMemoryDocument(1, {"body": "test TEST prØve"}))
-        index = InMemoryInvertedIndex(corpus, ["body"], self._normalizer, self._tokenizer)
+        index = MapReduceInvertedIndex(corpus, ["body"], self._normalizer, self._tokenizer)
         self.assertListEqual(list(index.get_terms("PRøvE wtf tesT")), ["prøve", "wtf", "test"])
         self.assertListEqual([(p.document_id, p.term_frequency) for p in index["prøve"]], [(1, 1)])
         self.assertListEqual([(p.document_id, p.term_frequency) for p in index.get_postings_iterator("wtf")], [])
@@ -25,16 +25,16 @@ class TestInMemoryInvertedIndex(unittest.TestCase):
     def test_mesh_corpus(self):
         import os.path
         from mapreduce.corpus import InMemoryCorpus
-        from mapreduce.invertedindex import InMemoryInvertedIndex
+        from mapreduce.invertedindex import MapReduceInvertedIndex
 
-        corpus = InMemoryCorpus(os.path.join("data", 'mesh.txt'))
-        index = InMemoryInvertedIndex(corpus, ["body"], self._normalizer, self._tokenizer)
+        corpus = InMemoryCorpus(os.path.join("data", "mesh.txt"))
+        index = MapReduceInvertedIndex(corpus, ["body"], self._normalizer, self._tokenizer)
         self.assertEqual(len(list(index["hydrogen"])), 8)
         self.assertEqual(len(list(index["hydrocephalus"])), 2)
 
     def test_multiple_fields(self):
         from mapreduce.corpus import InMemoryDocument, InMemoryCorpus
-        from mapreduce.invertedindex import InMemoryInvertedIndex
+        from mapreduce.invertedindex import MapReduceInvertedIndex
         document = InMemoryDocument(0, {
             'felt1': 'Dette er en test. Test, sa jeg. TEST!',
             'felt2': 'test er det',
@@ -42,7 +42,7 @@ class TestInMemoryInvertedIndex(unittest.TestCase):
         })
         corpus = InMemoryCorpus()
         corpus.add_document(document)
-        index = InMemoryInvertedIndex(corpus, ['felt1', 'felt3'], self._normalizer, self._tokenizer)
+        index = MapReduceInvertedIndex(corpus, ['felt1', 'felt3'], self._normalizer, self._tokenizer)
         posting = next(index.get_postings_iterator('test'))
         self.assertEqual(posting.document_id, 0)
         self.assertEqual(posting.term_frequency, 5)

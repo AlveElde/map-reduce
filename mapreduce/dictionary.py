@@ -79,6 +79,3 @@ class InMemoryDictionary(Dictionary):
 
     def get_term_id(self, term: str) -> Optional[int]:
         return self._terms.get(term, None)
-
-
-#TODO: Create a dict with support for custom term_id

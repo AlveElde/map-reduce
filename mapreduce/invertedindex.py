@@ -137,8 +137,8 @@ class MapReduceInvertedIndex(InvertedIndex):
 
     def _build_index(self, fields: Iterable[str]) -> None:
        mapreducer = MapReducer(fields, self._corpus, self._normalizer, self._tokenizer)
-       mappers = 4 
-       reducers = 4
+       mappers = 8
+       reducers = 8
        print_info = True
        self._posting_lists, self._dictionary._terms = mapreducer.mapreduce(mappers, reducers, print_info)
 
