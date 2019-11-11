@@ -1,8 +1,3 @@
-from joblib import Parallel, delayed
-import functools
-import hashlib
-from typing import Iterable, Iterator
-
 from .corpus import InMemoryDocument, InMemoryCorpus
 from .invertedindex import InMemoryInvertedIndex
 from .normalization import BrainDeadNormalizer
@@ -10,12 +5,7 @@ from .tokenization import BrainDeadTokenizer
 from .dictionary import InMemoryDictionary
 from .invertedindex import Posting
 
-class IntermediatePosting:
-    #TODO: slots
-    def __init__(self, term: str, document_id: int):
-        self.term = term
-        self.document_id = document_id
-
+from joblib import Parallel, delayed
 
 class MapReduceJob:
     def __init__(self):
@@ -32,10 +22,10 @@ class MapReduceJob:
         reducers = 2
 
         # Map.
-        interpostings = self._parallelize(self._map, self._corpus._documents, mappers)
+        keyvals_list = self._parallelize(self._map, self._corpus._documents, mappers)
 
         # Partition.
-        parts = self._partition(interpostings, reducers)
+        parts = self._partition(keyvals_list, reducers)
        
         # Reduce.
         reduced_parts = self._parallelize(self._reduce, parts, reducers)
@@ -51,18 +41,18 @@ class MapReduceJob:
 
 
     def _map(self, part):
-        mapped_items = []
+        keyvals = []
         for field in self._fields:
             for term in self._index.get_terms(part[field]):
-                mapped_items.append(IntermediatePosting(term, part.document_id))
-        return mapped_items
+                keyvals.append((term, part.document_id))
+        return keyvals
 
     
-    def _partition(self, interpostings, total_parts):
+    def _partition(self, keyvals_list, total_parts):
         parts = [[] for i in range(0, total_parts)]
-        for interposting_list in interpostings:
-            for interposting in interposting_list:
-                parts[hash(interposting.term) % total_parts].append(interposting)
+        for keyvals in keyvals_list:
+            for term, doc_id in keyvals:
+                parts[hash(term) % total_parts].append((term, doc_id))
         return parts
 
 
@@ -70,8 +60,8 @@ class MapReduceJob:
         dictionary = InMemoryDictionary()
         posting_lists = []
 
-        for interposting in part:
-            term_id = dictionary.add_if_absent(interposting.term)
+        for term, doc_id in part:
+            term_id = dictionary.add_if_absent(term)
 
             # Ensure we have a place to put our posting lists.
             posting_lists.extend([] for i in range(len(posting_lists), term_id+1))
@@ -79,14 +69,14 @@ class MapReduceJob:
             # Increment the count on a previously existing posting for this document ID. 
             has_posting = False
             for posting in posting_lists[term_id]:
-                if posting.document_id == interposting.document_id:
+                if posting.document_id == doc_id:
                     posting.term_frequency += 1
                     has_posting = True
                     break
             
             # Create a new posting for this document ID.
             if not has_posting:
-                posting_lists[term_id].append(Posting(interposting.document_id, 1))
+                posting_lists[term_id].append(Posting(doc_id, 1))
         
         return posting_lists, dictionary
 
@@ -96,7 +86,7 @@ class MapReduceJob:
         combined_dictionary = {}
 
         for posting_lists, dictionary in reduced_parts:
-            for (term, term_id) in dictionary:
+            for term, term_id in dictionary:
                 combined_dictionary[term] = len(combined_posting_lists) + term_id
             combined_posting_lists.extend(posting_lists)
 
