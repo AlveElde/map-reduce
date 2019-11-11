@@ -33,29 +33,37 @@ class MapReduceJob:
 
         # Partition
         #TODO: Make parallel
-        partitions = [([], part_id) for part_id in range(0, reducers)]
+        parts = [[] for i in range(0, reducers)]
 
         for interpostings in results:
             for interposting in interpostings:
-                partitions[hash(interposting.term) % reducers][0].append(interposting)
+                parts[hash(interposting.term) % reducers].append(interposting)
         
-        posting_lists = self.parallelize(self.reduce_to_posting_lists, partitions, reducers)
+        results = self.parallelize(self.reduce_to_posting_lists, parts, reducers)
 
-        # Take the dictionaries as well
-        # join the poisting list lists
-        # Create a new dictionary, with correct term_ids
+        combined_posting_lists = []
+        combined_dictionary = {}
+
+        for posting_lists, dictionary in results:
+            for (term, term_id) in dictionary:
+                combined_dictionary[term] = len(combined_posting_lists) + term_id
+
+            combined_posting_lists.extend(posting_lists)
+
+
+        
         print("Done!")
 
 
     def parallelize(self, func, parts, total_parts):
-        return Parallel(n_jobs=total_parts)(delayed(func)(part, total_parts) for part in parts)
+        return Parallel(n_jobs=total_parts)(delayed(func)(part) for part in parts)
 
 
-    def map_terms(self, doc, total_parts):
+    def map_terms(self, part):
         mapped_items = []
         for field in self._fields:
-            for term in self._index.get_terms(doc[field]):
-                mapped_items.append(IntermediatePosting(term, doc.document_id))
+            for term in self._index.get_terms(part[field]):
+                mapped_items.append(IntermediatePosting(term, part.document_id))
         return mapped_items
 
     
@@ -66,21 +74,19 @@ class MapReduceJob:
         pass
 
 
-    def reduce_to_posting_lists(self, part, total_parts):
+    def reduce_to_posting_lists(self, part):
         dictionary = InMemoryDictionary()
-        part_id = part[1]
         posting_lists = []
 
-        for interposting in part[0]:
-            local_id = dictionary.add_if_absent(interposting.term)
-            term_id = part_id + (local_id * total_parts)
+        for interposting in part:
+            term_id = dictionary.add_if_absent(interposting.term)
 
             # Ensure we have a place to put our posting lists.
-            posting_lists.extend([] for i in range(len(posting_lists), local_id+1))
+            posting_lists.extend([] for i in range(len(posting_lists), term_id+1))
 
             # Increment the count on a previously existing posting for this document ID. 
             has_posting = False
-            for posting in posting_lists[local_id]:
+            for posting in posting_lists[term_id]:
                 if posting.document_id == interposting.document_id:
                     posting.term_frequency += 1
                     has_posting = True
@@ -88,6 +94,6 @@ class MapReduceJob:
             
             # Create a new posting for this document ID.
             if not has_posting:
-                posting_lists[local_id].append(Posting(interposting.document_id, 1))
+                posting_lists[term_id].append(Posting(interposting.document_id, 1))
         
         return posting_lists, dictionary
