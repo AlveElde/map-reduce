@@ -35,7 +35,6 @@ class MapReduceJob:
 
         print("Done!")
 
-
     def _parallelize(self, func, parts, total_parts):
         return Parallel(n_jobs=total_parts)(delayed(func)(part) for part in parts)
 
@@ -46,8 +45,8 @@ class MapReduceJob:
             for term in self._index.get_terms(part[field]):
                 keyvals.append((term, part.document_id))
         return keyvals
-
     
+
     def _partition(self, keyvals_list, total_parts):
         parts = [[] for i in range(0, total_parts)]
         for keyvals in keyvals_list:
