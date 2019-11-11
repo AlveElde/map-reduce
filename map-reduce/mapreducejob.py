@@ -16,6 +16,7 @@ class IntermediatePosting:
         self.term = term
         self.document_id = document_id
 
+
 class MapReduceJob:
     def __init__(self):
         self._corpus = InMemoryCorpus()
@@ -29,37 +30,27 @@ class MapReduceJob:
     def mapreduce(self):
         mappers = 2
         reducers = 2
-        results = self.parallelize(self.map_terms, self._corpus._documents, mappers)
 
-        # Partition
-        #TODO: Make parallel
-        parts = [[] for i in range(0, reducers)]
+        # Map.
+        interpostings = self._parallelize(self._map, self._corpus._documents, mappers)
 
-        for interpostings in results:
-            for interposting in interpostings:
-                parts[hash(interposting.term) % reducers].append(interposting)
-        
-        results = self.parallelize(self.reduce_to_posting_lists, parts, reducers)
+        # Partition.
+        parts = self._partition(interpostings, reducers)
+       
+        # Reduce.
+        reduced_parts = self._parallelize(self._reduce, parts, reducers)
 
-        combined_posting_lists = []
-        combined_dictionary = {}
+        # Combine.
+        combined_posting_lists, combined_dictionary = self._combine(reduced_parts)
 
-        for posting_lists, dictionary in results:
-            for (term, term_id) in dictionary:
-                combined_dictionary[term] = len(combined_posting_lists) + term_id
-
-            combined_posting_lists.extend(posting_lists)
-
-
-        
         print("Done!")
 
 
-    def parallelize(self, func, parts, total_parts):
+    def _parallelize(self, func, parts, total_parts):
         return Parallel(n_jobs=total_parts)(delayed(func)(part) for part in parts)
 
 
-    def map_terms(self, part):
+    def _map(self, part):
         mapped_items = []
         for field in self._fields:
             for term in self._index.get_terms(part[field]):
@@ -67,14 +58,15 @@ class MapReduceJob:
         return mapped_items
 
     
-    def partition_ter(self):
-        # Iterate through each term
-        # worker to assign = hash of term % number of workers
-        # Place in array of correct worker
-        pass
+    def _partition(self, interpostings, total_parts):
+        parts = [[] for i in range(0, total_parts)]
+        for interposting_list in interpostings:
+            for interposting in interposting_list:
+                parts[hash(interposting.term) % total_parts].append(interposting)
+        return parts
 
 
-    def reduce_to_posting_lists(self, part):
+    def _reduce(self, part):
         dictionary = InMemoryDictionary()
         posting_lists = []
 
@@ -97,3 +89,15 @@ class MapReduceJob:
                 posting_lists[term_id].append(Posting(interposting.document_id, 1))
         
         return posting_lists, dictionary
+
+
+    def _combine(self, reduced_parts):
+        combined_posting_lists = []
+        combined_dictionary = {}
+
+        for posting_lists, dictionary in reduced_parts:
+            for (term, term_id) in dictionary:
+                combined_dictionary[term] = len(combined_posting_lists) + term_id
+            combined_posting_lists.extend(posting_lists)
+
+        return combined_posting_lists, combined_dictionary
