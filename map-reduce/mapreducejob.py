@@ -33,11 +33,11 @@ class MapReduceJob:
 
         # Partition
         #TODO: Make parallel
-        partitions = [[] for i in range(0, reducers)]
+        partitions = [([], part_id) for part_id in range(0, reducers)]
 
         for interpostings in results:
             for interposting in interpostings:
-                partitions[hash(interposting.term) % reducers].append(interposting)
+                partitions[hash(interposting.term) % reducers][0].append(interposting)
         
         posting_lists = self.parallelize(self.reduce_to_posting_lists, partitions, reducers)
 
@@ -47,12 +47,11 @@ class MapReduceJob:
         print("Done!")
 
 
+    def parallelize(self, func, parts, total_parts):
+        return Parallel(n_jobs=total_parts)(delayed(func)(part, total_parts) for part in parts)
 
 
-    def parallelize(self, func, elements, jobs):
-        return Parallel(n_jobs=jobs)(delayed(func)(elem) for elem in elements)
-
-    def map_terms(self, doc):
+    def map_terms(self, doc, total_parts):
         mapped_items = []
         for field in self._fields:
             for term in self._index.get_terms(doc[field]):
@@ -60,26 +59,28 @@ class MapReduceJob:
         return mapped_items
 
     
-    def partition(self):
+    def partition_ter(self):
         # Iterate through each term
         # worker to assign = hash of term % number of workers
         # Place in array of correct worker
-
         pass
 
-    def reduce_to_posting_lists(self, partitions):
+
+    def reduce_to_posting_lists(self, part, total_parts):
         dictionary = InMemoryDictionary()
+        part_id = part[1]
         posting_lists = []
 
-        for interposting in partitions:
-            term_id = dictionary.add_if_absent(interposting.term)
+        for interposting in part[0]:
+            local_id = dictionary.add_if_absent(interposting.term)
+            term_id = part_id + (local_id * total_parts)
 
             # Ensure we have a place to put our posting lists.
-            posting_lists.extend([] for i in range(len(posting_lists), term_id+1))
+            posting_lists.extend([] for i in range(len(posting_lists), local_id+1))
 
             # Increment the count on a previously existing posting for this document ID. 
             has_posting = False
-            for posting in posting_lists[term_id]:
+            for posting in posting_lists[local_id]:
                 if posting.document_id == interposting.document_id:
                     posting.term_frequency += 1
                     has_posting = True
@@ -87,6 +88,6 @@ class MapReduceJob:
             
             # Create a new posting for this document ID.
             if not has_posting:
-                posting_lists[term_id].append(Posting(interposting.document_id, 1))
+                posting_lists[local_id].append(Posting(interposting.document_id, 1))
         
-        return posting_lists
+        return posting_lists, dictionary
