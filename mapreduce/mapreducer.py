@@ -103,18 +103,14 @@ class MapReducer:
             term_id = dictionary.add_if_absent(term)
             posting_lists.extend([] for i in range(len(posting_lists), term_id+1))
 
-            # Increment the count on a previously existing posting for this document ID. 
-            has_posting = False
-            for posting in posting_lists[term_id]:
-                if posting.document_id == doc_id:
-                    posting.term_frequency += 1
-                    has_posting = True
-                    break
-            
-            # Create a new posting for this document ID.
-            if not has_posting:
+            for i in [p for p in posting_lists[term_id] if p.document_id == doc_id]:
+                # Increment the count on a previously existing posting for this document ID. 
+                i.term_frequency += 1
+                break
+            else:
+                # Create a new posting for this document ID.
                 posting_lists[term_id].append(Posting(doc_id, 1))
-        
+                
         return posting_lists, dictionary
 
 
