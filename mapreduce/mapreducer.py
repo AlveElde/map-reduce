@@ -46,11 +46,11 @@ class MapReducer:
         if print_log:
             print(log_line)
 
-    # Split the document into a number of equal sized parts.
-    def _split(self, elements, total_parts):
+    # Split the corpus into a number of equal sized parts.
+    def _split(self, elements, stride):
         parts = []
-        for i in range(0, len(elements), total_parts):
-            parts.append(elements[i:i + total_parts])
+        for i in range(0, len(elements), stride):
+            parts.append(elements[i:i + stride])
         return parts
         
 
