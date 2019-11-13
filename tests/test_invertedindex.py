@@ -27,7 +27,7 @@ class TestInMemoryInvertedIndex(unittest.TestCase):
         from mapreduce.corpus import InMemoryCorpus
         from mapreduce.invertedindex import InMemoryInvertedIndex
 
-        corpus = InMemoryCorpus(os.path.join("data", 'mesh.txt'))
+        corpus = InMemoryCorpus(os.path.join("../data", 'mesh.txt'))
         index = InMemoryInvertedIndex(corpus, ["body"], self._normalizer, self._tokenizer)
         self.assertEqual(len(list(index["hydrogen"])), 8)
         self.assertEqual(len(list(index["hydrocephalus"])), 2)
