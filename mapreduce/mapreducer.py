@@ -18,8 +18,10 @@ class MapReducer:
     
     # Build an inverted index with MapReduce semantics.
     def mapreduce(self, mappers: int, reducers: int, print_log: bool) -> (list, dict):
+        document_split = self._split(self._corpus._documents, mappers)
+
         self._print_log("Starting mapping...", print_log)
-        keyvals_list = self._parallelize(self._map, self._corpus._documents, mappers)
+        keyvals_list = self._parallelize(self._map, document_split, mappers)
         self._print_log("Finished mapping!", print_log)
 
         self._print_log("Starting partitioning...", print_log)
@@ -41,16 +43,18 @@ class MapReducer:
     def _print_log(self, log_line, print_log):
         if print_log:
             print(log_line)
+
+    def _split(self, elements, total_parts):
+        parts = []
+        for i in range(0, len(elements), total_parts):
+            parts.append(elements[i:i + total_parts])
+        return parts
         
 
     # Run the function func on each part in parts.
     # JobLib will perform the function calls in parallel threads.
     # This becomes very slow for a large number of parts.
-    def _parallelize(self, func: callable, elements: list, total_parts: int) -> list:
-        parts = []
-        for i in range(0, len(elements), total_parts):
-            parts.append(elements[i:i + total_parts])
-
+    def _parallelize(self, func: callable, parts: list, total_parts: int) -> list:
         return Parallel(n_jobs=total_parts, prefer="threads", backend="threading")(
             delayed(func)(part)
             for part in parts)
@@ -88,26 +92,25 @@ class MapReducer:
     # Reduce the (key, value) pairs into posting lists.
     # This step will produce complete posting lists for each term in this partition.
     # It will also produce a term ID dictionary for each term in this partition.
-    def _reduce(self, partitions: list) -> (list, dict):
+    def _reduce(self, partition: list) -> (list, dict):
         dictionary = InMemoryDictionary()
         posting_lists = []
 
-        for partition in partitions:
-            for term, doc_id in partition:
-                term_id = dictionary.add_if_absent(term)
-                posting_lists.extend([] for i in range(len(posting_lists), term_id+1))
+        for term, doc_id in partition:
+            term_id = dictionary.add_if_absent(term)
+            posting_lists.extend([] for i in range(len(posting_lists), term_id+1))
 
-                # Increment the count on a previously existing posting for this document ID. 
-                has_posting = False
-                for posting in posting_lists[term_id]:
-                    if posting.document_id == doc_id:
-                        posting.term_frequency += 1
-                        has_posting = True
-                        break
-                
-                # Create a new posting for this document ID.
-                if not has_posting:
-                    posting_lists[term_id].append(Posting(doc_id, 1))
+            # Increment the count on a previously existing posting for this document ID. 
+            has_posting = False
+            for posting in posting_lists[term_id]:
+                if posting.document_id == doc_id:
+                    posting.term_frequency += 1
+                    has_posting = True
+                    break
+            
+            # Create a new posting for this document ID.
+            if not has_posting:
+                posting_lists[term_id].append(Posting(doc_id, 1))
         
         return posting_lists, dictionary
 
