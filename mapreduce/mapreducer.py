@@ -18,7 +18,9 @@ class MapReducer:
     
     # Build an inverted index with MapReduce semantics.
     def mapreduce(self, mappers: int, reducers: int, print_log: bool) -> (list, dict):
+        self._print_log("Starting splitting...", print_log)
         document_split = self._split(self._corpus._documents, mappers)
+        self._print_log("Finished splitting!", print_log)
 
         self._print_log("Starting mapping...", print_log)
         keyvals_list = self._parallelize(self._map, document_split, mappers)
@@ -44,6 +46,7 @@ class MapReducer:
         if print_log:
             print(log_line)
 
+    # Split the document into a number of equal sized parts.
     def _split(self, elements, total_parts):
         parts = []
         for i in range(0, len(elements), total_parts):
