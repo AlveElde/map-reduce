@@ -1,6 +1,6 @@
-#MapReduce
+# MapReduce
 
-###Intro
+### Intro
 MapReduce er et rammeverk funnet opp av Google i sine tidlige stadier for å forenkle prosessen å fordele oppgaver på maskiner som ellers ville tatt for lang tid på en. 
 
 Vi snakker oppgaver som ville tatt en måned eller to blir utført på et par dager.
@@ -15,24 +15,25 @@ Derav MapReduce. Målet her var at brukeren skulle kun skrive hva som måtte til
 
 For å gjøre dette skriver brukeren to deler av programmet: en map del og en reduce del. Detaljene rundt disse delene kommer vi tilbake til. 
 
-###Kjøring
-####Dette er da "User Program" på grafen.
+### Kjøring
+
+#### Dette er da "User Program" på grafen.
 
 MapReduce assigner en maskin som "Master:" denne prosessen fordeler oppgaver, holder styr på hvilken maskin som gjør hva og mest kritisk av alt: holder styr på failures. Kort forklart: en oppgave blir market som 'uferdig' frem til maskinen som skal utføre den er ferdig. Om Master ikke klarer å pinge en maskin etter en viss tid, eller at prosessen ikke er ferdig etter en slags "worst case tid" antar den maskinen som død og assigner en ny maskin til oppgaven. Dette fungere også om selve prosessen krasjer og maskinen er oppe: den får oppgaven på nytt. 
 
-####Første steg: map
+#### Første steg: map
 Her for arbeiderene hver sin split av dataen som skal jobbes på og lager en liste av <key, value> par.
 
-####Mellom-steg: combine/shuffle
+#### Mellom-steg: combine/shuffle
 Data blir satt sammen på et eller annet hvis om nødvendig. Meningsløst å ha en liste av <term, 1> på et dokument når man kan én <term, termfrekvens> for det dokumentet om dette er en trivielt å løse.
 Dette skjer på maskinen som har utført map og kan spare en god del nett-trafikk. 
 
-####Reduce
+#### Reduce
 Alle reduce prosesser jobber med alle par med en key, slik at det blir enklere å jobbe med store mengder data som ikke passer i minne. 
 
-####Resultat
+#### Resultat
 Må nok slåes sammen fra flere filer over nettverk, men dette skal være trivielt. 
 
 
-###Eksempler:
+### Eksempler:
 Distributed Grep / Sort, og diverse telling. Vi bruker Inverted Index som eksempel.
